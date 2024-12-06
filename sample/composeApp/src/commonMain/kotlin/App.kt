@@ -34,6 +34,7 @@ fun App() {
 
     MaterialTheme {
         val scope = rememberCoroutineScope()
+//        在 Kotlin 中，解构声明（Destructuring Declaration）允许你将一个对象的属性分解为多个变量。这在处理包含多个属性的对象时非常有用。
         val (localStream, setLocalStream) = remember { mutableStateOf<MediaStream?>(null) }
         val (remoteVideoTrack, setRemoteVideoTrack) = remember {
             mutableStateOf<VideoStreamTrack?>(
@@ -71,7 +72,7 @@ fun App() {
 
             remoteVideoTrack?.let {
                 Video(
-                    videoTrack = it,
+                    videoTrack = it, // 这里的it就是指的不为空的remoteVideoTrack
                     audioTrack = remoteAudioTrack,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                 )
@@ -108,11 +109,15 @@ fun App() {
                         }
                     )
                 }
+
+                // 判断是否有连接
                 if (peerConnections == null) {
+                    // 拨打，建立连接
                     CallButton(
                         onClick = { setPeerConnections(Pair(PeerConnection(), PeerConnection())) },
                     )
                 } else {
+                    //挂断，断开连接
                     HangupButton(onClick = {
                         hangup(peerConnections)
                         setPeerConnections(null)
