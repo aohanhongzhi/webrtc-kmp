@@ -17,26 +17,27 @@ import androidx.compose.ui.unit.dp
 import co.touchlab.kermit.Logger
 import co.touchlab.kermit.platformLogWriter
 import com.shepeliev.webrtckmp.AudioStreamTrack
-import kotlinx.coroutines.channels.consumeEach
-import com.shepeliev.webrtckmp.SessionDescription
 import com.shepeliev.webrtckmp.IceCandidate
-import kotlinx.coroutines.channels.consumeEach
-import kotlinx.coroutines.channels.consumeEach
-import kotlinx.coroutines.channels.consumeEach
+import com.shepeliev.webrtckmp.IceServer
 import com.shepeliev.webrtckmp.MediaDevices
 import com.shepeliev.webrtckmp.MediaStream
 import com.shepeliev.webrtckmp.PeerConnection
 import com.shepeliev.webrtckmp.RtcConfiguration
-import com.shepeliev.webrtckmp.IceServer
+import com.shepeliev.webrtckmp.SessionDescription
+import com.shepeliev.webrtckmp.SessionDescriptionType
 import com.shepeliev.webrtckmp.VideoStreamTrack
+import com.shepeliev.webrtckmp.onIceCandidate
 import com.shepeliev.webrtckmp.videoTracks
+import io.ktor.client.HttpClient
+import io.ktor.client.plugins.logging.LogLevel
+import io.ktor.client.plugins.logging.Logging
+import io.ktor.client.plugins.websocket.WebSockets
+import io.ktor.client.plugins.websocket.webSocket
+import io.ktor.websocket.Frame
+import io.ktor.websocket.readText
+import kotlinx.coroutines.channels.consumeEach
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.ui.tooling.preview.Preview
-import io.ktor.client.WebSockets
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
-import io.ktor.client.plugins.sse.SSE
-import io.ktor.client.plugins.sse.sse
 
 
 const val SOCKET_URL = "wss://47.99.135.85:8186"
@@ -238,17 +239,19 @@ private fun handleSignalingMessage(
     val parts = message.split("|")
     when (parts[0]) {
         "OFFER" -> {
-            val sdp = SessionDescription(SessionDescription.Type.OFFER, parts[1])
+            val sdp = SessionDescription(SessionDescriptionType.Offer, parts[1])
             remotePeer?.setRemoteDescription(sdp)
             remotePeer?.createAnswer()?.then { answer ->
                 remotePeer.setLocalDescription(answer)
                 // 发送answer回对方设备
             }
         }
+
         "ANSWER" -> {
-            val sdp = SessionDescription(SessionDescription.Type.ANSWER, parts[1])
+            val sdp = SessionDescription(SessionDescriptionType.Answer, parts[1])
             localPeer?.setRemoteDescription(sdp)
         }
+
         "CANDIDATE" -> {
             val candidate = IceCandidate(
                 sdpMid = parts[1],
