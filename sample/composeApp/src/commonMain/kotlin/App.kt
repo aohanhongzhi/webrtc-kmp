@@ -17,6 +17,12 @@ import androidx.compose.ui.unit.dp
 import co.touchlab.kermit.Logger
 import co.touchlab.kermit.platformLogWriter
 import com.shepeliev.webrtckmp.AudioStreamTrack
+import kotlinx.coroutines.channels.consumeEach
+import com.shepeliev.webrtckmp.SessionDescription
+import com.shepeliev.webrtckmp.IceCandidate
+import kotlinx.coroutines.channels.consumeEach
+import kotlinx.coroutines.channels.consumeEach
+import kotlinx.coroutines.channels.consumeEach
 import com.shepeliev.webrtckmp.MediaDevices
 import com.shepeliev.webrtckmp.MediaStream
 import com.shepeliev.webrtckmp.PeerConnection
@@ -26,12 +32,43 @@ import com.shepeliev.webrtckmp.VideoStreamTrack
 import com.shepeliev.webrtckmp.videoTracks
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.ui.tooling.preview.Preview
+import io.ktor.client.WebSockets
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.sse.SSE
+import io.ktor.client.plugins.sse.sse
+
+
+const val SOCKET_URL = "wss://47.99.135.85:8186"
+const val DEVICE_ID = "device_${(0..1000).random()}"
 
 @Composable
 @Preview
 fun App() {
+    val httpClient = HttpClient {
+        install(WebSockets)
+        install(Logging) {
+            level = LogLevel.ALL
+        }
+    }
+
     LaunchedEffect(Unit) {
         Logger.setLogWriters(platformLogWriter())
+        
+        // 连接信令服务器
+        httpClient.webSocket(SOCKET_URL) {
+            send("REGISTER|$DEVICE_ID")
+            incoming.consumeEach { frame ->
+                if (frame is Frame.Text) {
+                    val message = frame.readText()
+                    handleSignalingMessage(
+                        message = message,
+                        localPeer = peerConnections?.get("local"),
+                        remotePeer = peerConnections?.get("remote")
+                    )
+                }
+            }
+        }
     }
 
     MaterialTheme {
@@ -49,95 +86,176 @@ fun App() {
             )
         }
         val (peerConnections, setPeerConnections) = remember {
-            mutableStateOf<Pair<PeerConnection, PeerConnection>?>(null)
+            mutableStateOf<MutableMap<String, PeerConnection>?>(null)
         }
+        val (localDeviceId, _) = remember { mutableStateOf("device1") }
+        val (remoteDeviceId, _) = remember { mutableStateOf("device2") }
 
         LaunchedEffect(localStream, peerConnections) {
             if (peerConnections == null || localStream == null) return@LaunchedEffect
-            makeCall(peerConnections, localStream, setRemoteVideoTrack, setRemoteAudioTrack)
+            // 初始化双向连接
+            val localPeer = peerConnections["local"]!!
+            val remotePeer = peerConnections["remote"]!!
+
+            // 添加本地媒体流到本地PeerConnection
+            localPeer.addStream(localStream)
+
+            // 本地创建offer
+            localPeer.createOffer().then { offer ->
+                localPeer.setLocalDescription(offer)
+                // 通过网络传输offer到远程设备
+
+                // 远程设备收到offer后设置并创建answer
+                remotePeer.setRemoteDescription(offer)
+                remotePeer.createAnswer().then { answer ->
+                    remotePeer.setLocalDescription(answer)
+                    // 通过网络传输answer到本地设备
+
+                    // 本地设备设置远程answer
+                    localPeer.setRemoteDescription(answer)
+                }
+            }
+
+            // 处理远程媒体流
+            remotePeer.onAddStream = { stream ->
+                setRemoteVideoTrack(stream.videoTracks.firstOrNull())
+                setRemoteAudioTrack(stream.audioTracks.firstOrNull())
+            }
         }
 
-        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            val localVideoTrack = localStream?.videoTracks?.firstOrNull()
-
-            localVideoTrack?.let {
-                Video(
-                    videoTrack = it,
-                    modifier = Modifier.weight(1f).fillMaxWidth()
-                )
-            } ?: Box(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("Local video")
-            }
-
-            remoteVideoTrack?.let {
-                Video(
-                    videoTrack = it, // 这里的it就是指的不为空的remoteVideoTrack
-                    audioTrack = remoteAudioTrack,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                )
-            } ?: Box(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("Remote video")
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (localStream == null) {
-                    // Start 开始
-                    StartButton(onClick = {
-                        scope.launch {
-//                            准备媒体信息，获取硬件信息，摄像头 麦克风，做好准备
-                            val stream = MediaDevices.getUserMedia(audio = true, video = true)
-                            setLocalStream(stream)
-                        }
-                    })
-                } else {
-                    StopButton(
-                        onClick = {
-                            hangup(peerConnections)
-                            localStream.release()
-                            setLocalStream(null)
-                            setPeerConnections(null)
-                            setRemoteVideoTrack(null)
-                            setRemoteAudioTrack(null)
-                        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            // 本地视频显示区域
+            Column(Modifier.weight(1f)) {
+                localStream?.videoTracks?.firstOrNull()?.let { track ->
+                    Video(
+                        videoTrack = track,
+                        modifier = Modifier.fillMaxWidth()
                     )
-
-                    SwitchCameraButton(
-                        onClick = {
-                            scope.launch { localStream.videoTracks.firstOrNull()?.switchCamera() }
-                        }
-                    )
+                } ?: Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Text("Local Camera")
                 }
+            }
 
-                // 判断是否有连接
-                if (peerConnections == null) {
-                    // 拨打，建立连接
-                    CallButton(
-                        onClick = {
-                            // 设置ICE服务器
-                            val config = RtcConfiguration(
-                                iceServers = listOf(
-                                    IceServer(urls = listOf("stun:stun.l.google.com:19302"))
-                                )
-                            )
-                            setPeerConnections(Pair(PeerConnection(config), PeerConnection(config)))
-                        },
+            // 远程视频显示区域
+            Column(Modifier.weight(1f)) {
+                remoteVideoTrack?.let { track ->
+                    Video(
+                        videoTrack = track,
+                        audioTrack = remoteAudioTrack,
+                        modifier = Modifier.fillMaxWidth()
                     )
-                } else {
-                    //挂断，断开连接
-                    HangupButton(onClick = {
-                        hangup(peerConnections)
+                } ?: Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Text("Remote Camera")
+                }
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (localStream == null) {
+                StartButton(onClick = {
+                    scope.launch {
+                        val stream = MediaDevices.getUserMedia(audio = true, video = true)
+                        setLocalStream(stream)
+                    }
+                })
+            } else {
+                StopButton(
+                    onClick = {
+                        peerConnections?.values?.forEach { it.close() }
+                        localStream.release()
+                        setLocalStream(null)
                         setPeerConnections(null)
                         setRemoteVideoTrack(null)
                         setRemoteAudioTrack(null)
-                    })
-                }
+                    }
+                )
+
+                SwitchCameraButton(
+                    onClick = {
+                        scope.launch { localStream.videoTracks.firstOrNull()?.switchCamera() }
+                    }
+                )
             }
+
+            // 判断是否有连接
+            if (peerConnections == null) {
+                // 拨打，建立连接
+                CallButton(
+                    onClick = {
+                        // 设置ICE服务器
+                        val config = RtcConfiguration(
+                            iceServers = listOf(
+                                IceServer(urls = listOf("stun:stun.l.google.com:19302"))
+                            )
+                        )
+                        val localPeer = PeerConnection(config).apply {
+                            onIceCandidate = { candidate ->
+                                httpClient.webSocket(SOCKET_URL) {
+                                    send("CANDIDATE|${candidate.sdpMid}|${candidate.sdpMLineIndex}|${candidate.sdp}")
+                                }
+                            }
+                            onAddStream = { stream ->
+                                setRemoteVideoTrack(stream.videoTracks.firstOrNull())
+                                setRemoteAudioTrack(stream.audioTracks.firstOrNull())
+                            }
+                        }
+
+                        val remotePeer = PeerConnection(config).apply {
+                            onIceCandidate = { candidate ->
+                                httpClient.webSocket(SOCKET_URL) {
+                                    send("CANDIDATE|${candidate.sdpMid}|${candidate.sdpMLineIndex}|${candidate.sdp}")
+                                }
+                            }
+                        }
+
+                        setPeerConnections(
+                            mutableMapOf(
+                                "local" to localPeer,
+                                "remote" to remotePeer
+                            )
+                        )
+                    },
+                )
+            } else {
+                //挂断，断开连接
+                HangupButton(onClick = {
+                    hangup(peerConnections)
+                    setPeerConnections(null)
+                    setRemoteVideoTrack(null)
+                    setRemoteAudioTrack(null)
+                })
+            }
+        }
+    }
+}
+
+
+private fun handleSignalingMessage(
+    message: String,
+    localPeer: PeerConnection?,
+    remotePeer: PeerConnection?
+) {
+    val parts = message.split("|")
+    when (parts[0]) {
+        "OFFER" -> {
+            val sdp = SessionDescription(SessionDescription.Type.OFFER, parts[1])
+            remotePeer?.setRemoteDescription(sdp)
+            remotePeer?.createAnswer()?.then { answer ->
+                remotePeer.setLocalDescription(answer)
+                // 发送answer回对方设备
+            }
+        }
+        "ANSWER" -> {
+            val sdp = SessionDescription(SessionDescription.Type.ANSWER, parts[1])
+            localPeer?.setRemoteDescription(sdp)
+        }
+        "CANDIDATE" -> {
+            val candidate = IceCandidate(
+                sdpMid = parts[1],
+                sdpMLineIndex = parts[2].toInt(),
+                sdp = parts[3]
+            )
+            localPeer?.addIceCandidate(candidate)
         }
     }
 }
