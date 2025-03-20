@@ -20,6 +20,8 @@ import com.shepeliev.webrtckmp.AudioStreamTrack
 import com.shepeliev.webrtckmp.MediaDevices
 import com.shepeliev.webrtckmp.MediaStream
 import com.shepeliev.webrtckmp.PeerConnection
+import com.shepeliev.webrtckmp.RtcConfiguration
+import com.shepeliev.webrtckmp.IceServer
 import com.shepeliev.webrtckmp.VideoStreamTrack
 import com.shepeliev.webrtckmp.videoTracks
 import kotlinx.coroutines.launch
@@ -85,8 +87,10 @@ fun App() {
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (localStream == null) {
+                    // Start 开始
                     StartButton(onClick = {
                         scope.launch {
+//                            准备媒体信息，获取硬件信息，摄像头 麦克风，做好准备
                             val stream = MediaDevices.getUserMedia(audio = true, video = true)
                             setLocalStream(stream)
                         }
@@ -114,7 +118,15 @@ fun App() {
                 if (peerConnections == null) {
                     // 拨打，建立连接
                     CallButton(
-                        onClick = { setPeerConnections(Pair(PeerConnection(), PeerConnection())) },
+                        onClick = {
+                            // 设置ICE服务器
+                            val config = RtcConfiguration(
+                                iceServers = listOf(
+                                    IceServer(urls = listOf("stun:stun.l.google.com:19302"))
+                                )
+                            )
+                            setPeerConnections(Pair(PeerConnection(config), PeerConnection(config)))
+                        },
                     )
                 } else {
                     //挂断，断开连接
