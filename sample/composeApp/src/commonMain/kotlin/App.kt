@@ -137,7 +137,7 @@ fun App() {
 
                 override fun onConnectionError(errorMessage: String) {
                     // 处理连接错误
-                    Logger.i { "处理连接错误" }
+                    Logger.i { "处理连接错误 $errorMessage" }
                 }
             })
         }

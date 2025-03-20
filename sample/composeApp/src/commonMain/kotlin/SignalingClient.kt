@@ -1,7 +1,5 @@
 import co.touchlab.kermit.Logger
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
-import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.http.HttpMethod
 import io.ktor.http.URLBuilder
@@ -46,10 +44,9 @@ class SignalingClient(private val socketUrl: String) {
 
     init {
         try {
-            client = HttpClient(CIO) {
-                install(WebSockets)
-            }
+
             CoroutineScope(Dispatchers.Default).launch {
+                client = createUnsafeHttpClient()
                 connect()
             }
         } catch (e: Exception) {
@@ -69,6 +66,7 @@ class SignalingClient(private val socketUrl: String) {
                 setupSocketEvents()
             }
         } catch (e: Exception) {
+            Logger.e { "${e}"  }
             signalingListener?.onConnectionError(e.message ?: "Connection error")
         }
     }
