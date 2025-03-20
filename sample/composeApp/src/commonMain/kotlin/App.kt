@@ -1,3 +1,4 @@
+import SignalingClient.Companion.EVENT_GOT_USER_MEDIA
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,15 +18,17 @@ import androidx.compose.ui.unit.dp
 import co.touchlab.kermit.Logger
 import co.touchlab.kermit.platformLogWriter
 import com.shepeliev.webrtckmp.AudioStreamTrack
+import com.shepeliev.webrtckmp.IceServer
 import com.shepeliev.webrtckmp.MediaDevices
 import com.shepeliev.webrtckmp.MediaStream
 import com.shepeliev.webrtckmp.PeerConnection
 import com.shepeliev.webrtckmp.RtcConfiguration
-import com.shepeliev.webrtckmp.IceServer
 import com.shepeliev.webrtckmp.VideoStreamTrack
 import com.shepeliev.webrtckmp.videoTracks
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.ui.tooling.preview.Preview
+
+const val SOCKET_URL = "https://47.99.135.85:8186"
 
 @Composable
 @Preview
@@ -49,7 +52,94 @@ fun App() {
             )
         }
         val (peerConnections, setPeerConnections) = remember {
-            mutableStateOf<Pair<PeerConnection, PeerConnection>?>(null)
+            mutableStateOf<Pair<PeerConnection, PeerConnection>?>(
+                null
+            )
+        }
+
+        // 创建信令客户端实例
+        val signalingClient = remember { SignalingClient(SOCKET_URL) }
+        val (roomName, setRoomName) = remember { mutableStateOf<String?>(null) }
+
+        // 设置信令客户端监听器
+        LaunchedEffect(signalingClient) {
+
+//            private fun createPeerConnection() {
+//                val rtcConfig = RtcConfiguration(
+//                    listOf(
+//                        PeerConnection.IceServer.builder("stun:47.99.135.85:3478").createIceServer(),
+//                    )
+//                )
+//                peerConnection =
+//                    peerConnectionFactory.createPeerConnection(rtcConfig, mediaConstraints, this)
+//                        ?: throw IllegalStateException("Failed to create peer connection")
+//            }
+
+            signalingClient.setSignalingListener(object : SignalingClient.SignalingListener {
+                override fun onRemoteConnected() {
+                    // 处理远程连接
+                    Logger.i { "处理远程连接" }
+                    signalingClient.sendMessage1(EVENT_GOT_USER_MEDIA)
+                }
+
+                override fun onRejoin() {
+                    // 处理重新加入房间
+                    Logger.i { "处理重新加入房间" }
+//                    createPeerConnection()
+//                    createAudioTrack()
+                }
+
+                override fun onOfferReceived(offer: kotlinx.serialization.json.JsonObject) {
+
+                    Logger.i { "onOfferReceived" }
+
+                    scope.launch {
+//                        val remotePeerConnection = peerConnections?.second
+//                        remotePeerConnection?.setRemoteDescription(offer)
+//                        val answer = remotePeerConnection?.createAnswer()
+//                        remotePeerConnection?.setLocalDescription(answer)
+//                        signalingClient.sendOffer(answer!!)
+                    }
+                }
+
+                override fun onAnswerReceived(answer: kotlinx.serialization.json.JsonObject) {
+
+                    Logger.i { "onAnswerReceived" }
+
+                    scope.launch {
+//                        val localPeerConnection = peerConnections?.first
+//                        localPeerConnection?.setRemoteDescription(answer)
+                    }
+                }
+
+                override fun onIceCandidateReceived(candidate: kotlinx.serialization.json.JsonObject) {
+
+                    Logger.i { "onIceCandidateReceived" }
+
+                    scope.launch {
+//                        val sdpMid = candidate.getString("sdpMid")
+//                        val sdpMLineIndex = candidate.getInt("sdpMLineIndex")
+//                        val iceCandidate = org.webrtc.IceCandidate(sdpMid, sdpMLineIndex, candidate.getString("candidate"))
+//                        peerConnections?.first?.addIceCandidate(iceCandidate)
+//                        peerConnections?.second?.addIceCandidate(iceCandidate)
+                    }
+                }
+
+                override fun onDisconnected() {
+                    // 处理断开连接
+                    Logger.i { "处理断开连接" }
+                }
+
+                override fun onError(errorMessage: String) {
+                    // 处理错误
+                    Logger.i { "处理错误" }
+                }
+
+                override fun onConnectionError(errorMessage: String) {
+                    // 处理连接错误
+                    Logger.i { "处理连接错误" }
+                }
+            })
         }
 
         LaunchedEffect(localStream, peerConnections) {
@@ -114,27 +204,26 @@ fun App() {
                     )
                 }
 
-                // 判断是否有连接
-                if (peerConnections == null) {
-                    // 拨打，建立连接
+                if (roomName == null) {
                     CallButton(
                         onClick = {
-                            // 设置ICE服务器
                             val config = RtcConfiguration(
                                 iceServers = listOf(
                                     IceServer(urls = listOf("stun:stun.l.google.com:19302"))
                                 )
                             )
                             setPeerConnections(Pair(PeerConnection(config), PeerConnection(config)))
+                            setRoomName("room1") // 设置房间名称
+                            signalingClient.joinRoom("room1")
                         },
                     )
                 } else {
-                    //挂断，断开连接
                     HangupButton(onClick = {
                         hangup(peerConnections)
                         setPeerConnections(null)
                         setRemoteVideoTrack(null)
                         setRemoteAudioTrack(null)
+                        signalingClient.leaveRoom(roomName!!)
                     })
                 }
             }

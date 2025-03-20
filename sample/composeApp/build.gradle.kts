@@ -9,6 +9,8 @@ plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.jetbrains.compose)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.kotlinxSerialization)
+
     kotlin("native.cocoapods")
 }
 
@@ -83,6 +85,16 @@ kotlin {
             implementation(libs.kotlin.coroutines)
             implementation(libs.kermit)
             api(project(":webrtc-kmp"))
+            implementation(libs.ktor.serialization.kotlinx.json)
+            implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.kotlinx.serialization.json)
+            implementation(libs.bundles.ktor.common)
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.auth)
+            implementation(libs.ktor.client.cio)
+            implementation(libs.ktor.client.websockets)
+            implementation(libs.ktor.client.logging)
+            implementation(libs.ktor.client.content.negotiation)
         }
 
         androidMain.dependencies {
@@ -90,6 +102,7 @@ kotlin {
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
             implementation(libs.accompanist.permissions)
+            implementation(libs.ktor.client.android)
         }
 
         jsMain.dependencies {

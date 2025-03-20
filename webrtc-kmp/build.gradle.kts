@@ -95,10 +95,12 @@ kotlin {
             implementation(libs.kotlin.coroutines.android)
             implementation(libs.androidx.coreKtx)
             implementation(libs.androidx.startup)
+
         }
 
         jsMain.dependencies {
             implementation(npm("webrtc-adapter", "8.1.1"))
+            implementation(libs.ktor.client.js)
         }
 
         commonTest.dependencies {
