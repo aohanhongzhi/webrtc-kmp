@@ -26,6 +26,7 @@ import com.shepeliev.webrtckmp.RtcConfiguration
 import com.shepeliev.webrtckmp.SessionDescription
 import com.shepeliev.webrtckmp.SessionDescriptionType
 import com.shepeliev.webrtckmp.VideoStreamTrack
+import com.shepeliev.webrtckmp.audioTracks
 import com.shepeliev.webrtckmp.onIceCandidate
 import com.shepeliev.webrtckmp.videoTracks
 import io.ktor.client.HttpClient
@@ -41,7 +42,7 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 
 
 const val SOCKET_URL = "wss://47.99.135.85:8186"
-const val DEVICE_ID = "device_${(0..1000).random()}"
+val DEVICE_ID: String by lazy { "device_${(0..1000).random()}" }
 
 @Composable
 @Preview
@@ -95,16 +96,67 @@ fun App() {
         LaunchedEffect(localStream, peerConnections) {
             if (peerConnections == null || localStream == null) return@LaunchedEffect
             // 初始化双向连接
-            val localPeer = peerConnections["local"]!!
-            val remotePeer = peerConnections["remote"]!!
+            val localPeer = peerConnections["local"] ?: return@LaunchedEffect
+            val remotePeer = peerConnections["remote"] ?: return@LaunchedEffect
 
             // 添加本地媒体流到本地PeerConnection
-            localPeer.addStream(localStream)
+            localStream.videoTracks.forEach { track ->
+                track?.let {
+                    localPeer.addTrack(it)
+                    Logger.d { "Added video track: ${it.id}" }
+                }
+            }
+            localStream.audioTracks.forEach { track ->
+                track?.let {
+                    localPeer.addTrack(it)
+                    Logger.d { "Added audio track: ${it.id}" }
+                }
+            }
 
             // 本地创建offer
-            localPeer.createOffer().then { offer ->
-                localPeer.setLocalDescription(offer)
-                // 通过网络传输offer到远程设备
+            localPeer.createOffer(object : CreateOfferObserver {
+                override fun onCreateSuccess(offer: SessionDescription) {
+                    localPeer.setLocalDescription(offer)
+                    // 添加缺失的CreateAnswerObserver接口实现
+                    remotePeer.createAnswer(object : CreateAnswerObserver {
+                        override fun onCreateSuccess(answer: SessionDescription) {
+                            remotePeer.setLocalDescription(answer)
+                            try {
+                                httpClient.webSocket(SOCKET_URL) {
+                                    send("ANSWER|${answer.description}")
+                                }
+                            } catch (e: Exception) {
+                                Logger.e(e) { "Failed to send ANSWER" }
+                            }
+                        }
+
+                        override fun onCreateFailure(error: String) {
+                            Logger.e { "CreateAnswer failed: $error" }
+                        }
+                    }, sdpConstraints)
+                    try {
+                        httpClient.webSocket(SOCKET_URL) {
+                            send("OFFER|${offer.description}")
+                        }
+                    } catch (e: Exception) {
+                        Logger.e(e) { "Failed to send OFFER" }
+                    }
+                }
+
+                override fun onCreateFailure(error: String) {
+                    Logger.e { "CreateOffer failed: $error" }
+                }
+            })
+                try {
+                    httpClient.webSocket(SOCKET_URL) {
+                        send("OFFER|${offer.sdp}")
+                    }
+                } catch (e: Exception) {
+                    Logger.e(e) { "Failed to send OFFER" }
+                }
+                httpClient.webSocket(SOCKET_URL) {
+                    send("OFFER|${offer.sdp}")
+                }
 
                 // 远程设备收到offer后设置并创建answer
                 remotePeer.setRemoteDescription(offer)
@@ -191,8 +243,12 @@ fun App() {
                         )
                         val localPeer = PeerConnection(config).apply {
                             onIceCandidate = { candidate ->
-                                httpClient.webSocket(SOCKET_URL) {
-                                    send("CANDIDATE|${candidate.sdpMid}|${candidate.sdpMLineIndex}|${candidate.sdp}")
+                                try {
+                                    httpClient.webSocket(SOCKET_URL) {
+                                        send("CANDIDATE|${candidate.sdpMid}|${candidate.sdpMLineIndex}|${candidate.sdp}")
+                                    }
+                                } catch (e: Exception) {
+                                    Logger.e(e) { "Failed to send ICE candidate" }
                                 }
                             }
                             onAddStream = { stream ->
@@ -243,7 +299,9 @@ private fun handleSignalingMessage(
             remotePeer?.setRemoteDescription(sdp)
             remotePeer?.createAnswer()?.then { answer ->
                 remotePeer.setLocalDescription(answer)
-                // 发送answer回对方设备
+                httpClient.webSocket(SOCKET_URL) {
+                    send("ANSWER|${answer.sdp}")
+                }
             }
         }
 
