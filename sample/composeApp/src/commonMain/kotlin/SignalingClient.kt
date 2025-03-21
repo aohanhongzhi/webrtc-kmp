@@ -39,11 +39,12 @@ class SignalingClient(private val socketUrl: String) {
         const val MESSAGE_TYPE_CANDIDATE = "candidate"
 
         const val SOCKET_URL = "https://47.99.135.85:8186"
-        const val ROOM_NAME = "A01001JOY00000005"
+        const val ROOM_NAME = "A01001JOY00000002"
     }
 
 
     init {
+        socket = BoschSocket(socketUrl)
         setupSocketEvents()
     }
 
@@ -90,7 +91,7 @@ class SignalingClient(private val socketUrl: String) {
             // 第二个参数是socketId
             val socketId = args[1] as String
             // 其他用户id
-            val otherIds = args[2] as JsonArray
+            val otherIds = args[2] as ArrayList<Any>
             val myId = socket.id()
             //自己加入房间
             if (socketId == myId) {

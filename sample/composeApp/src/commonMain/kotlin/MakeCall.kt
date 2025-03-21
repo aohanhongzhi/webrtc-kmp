@@ -2,6 +2,7 @@ import SignalingClient.Companion.EVENT_GOT_USER_MEDIA
 import SignalingClient.Companion.ROOM_NAME
 import co.touchlab.kermit.Logger
 import com.shepeliev.webrtckmp.AudioStreamTrack
+import com.shepeliev.webrtckmp.IceCandidate
 import com.shepeliev.webrtckmp.MediaStream
 import com.shepeliev.webrtckmp.MediaStreamTrackKind
 import com.shepeliev.webrtckmp.OfferAnswerOptions
@@ -14,6 +15,7 @@ import com.shepeliev.webrtckmp.onTrack
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.filterNotNull
@@ -72,7 +74,16 @@ suspend fun makeCall(
         }
 
         override fun onIceCandidateReceived(candidate: JsonObject) {
-            TODO("Not yet implemented")
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val iceCandidate = IceCandidate("1", 1, "1")
+                    peerConnection.addIceCandidate(iceCandidate)
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        onError("处理 Offer 失败: ${e.message}")
+                    }
+                }
+            }
         }
 
         override fun onDisconnected() {
@@ -107,6 +118,12 @@ suspend fun makeCall(
 
     // 加入房间触发连接
     signalingClient.joinRoom(ROOM_NAME)
+
+    if (false){
+        // 断开时清理
+        peerConnection.close()
+        signalingClient.disconnect()
+    }
 
     awaitCancellation()
 }

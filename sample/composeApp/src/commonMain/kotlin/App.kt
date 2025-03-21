@@ -59,9 +59,10 @@ fun App() {
 
         LaunchedEffect(localStream, peerConnection) {
             logger.i { "尝试建立webrtc连接？ peerConnections=$peerConnection , localStream=$localStream" }
+            val signalingClient = SignalingClient(SOCKET_URL)
             if (peerConnection == null || localStream == null) return@LaunchedEffect
             logger.d("开始建立webrtc连接")
-            val signalingClient = SignalingClient(SOCKET_URL)
+
             makeCall(peerConnection!!, signalingClient, localStream, setRemoteVideoTrack, setRemoteAudioTrack)
         }
 

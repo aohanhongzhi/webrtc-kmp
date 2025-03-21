@@ -1,4 +1,4 @@
-expect class BoschSocket {
+expect class BoschSocket( socketUrl: String) {
 
     fun id(): String
 
