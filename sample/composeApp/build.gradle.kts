@@ -9,6 +9,7 @@ plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.jetbrains.compose)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.kotlinxSerialization)
     kotlin("native.cocoapods")
 }
 
@@ -83,6 +84,8 @@ kotlin {
             implementation(libs.kotlin.coroutines)
             implementation(libs.kermit)
             api(project(":webrtc-kmp"))
+            implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.kotlinx.serialization.json)
         }
 
         androidMain.dependencies {

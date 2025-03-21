@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.onEach
 
 suspend fun makeCall(
     peerConnections: Pair<PeerConnection, PeerConnection>,
+//    signalingClient: SignalingClient,       // 新增信令客户端
     localStream: MediaStream,
     onRemoteVideoTrack: (VideoStreamTrack) -> Unit,
     onRemoteAudioTrack: (AudioStreamTrack) -> Unit = {},
