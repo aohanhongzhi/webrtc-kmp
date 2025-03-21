@@ -37,6 +37,9 @@ class SignalingClient(private val socketUrl: String) {
         const val MESSAGE_TYPE_OFFER = "offer"
         const val MESSAGE_TYPE_ANSWER = "answer"
         const val MESSAGE_TYPE_CANDIDATE = "candidate"
+
+        const val SOCKET_URL = "https://47.99.135.85:8186"
+        const val ROOM_NAME = "A01001JOY00000005"
     }
 
 

@@ -1,3 +1,4 @@
+import SignalingClient.Companion.SOCKET_URL
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,9 +9,11 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -51,15 +54,15 @@ fun App() {
                 null
             )
         }
-        val (peerConnections, setPeerConnections) = remember {
-            mutableStateOf<Pair<PeerConnection, PeerConnection>?>(null)
-        }
+        // 声明可空状态变量
+        var peerConnection: PeerConnection? by remember { mutableStateOf(null) }
 
-        LaunchedEffect(localStream, peerConnections) {
-            logger.i { "尝试建立webrtc连接？ peerConnections=$peerConnections , localStream=$localStream" }
-            if (peerConnections == null || localStream == null) return@LaunchedEffect
+        LaunchedEffect(localStream, peerConnection) {
+            logger.i { "尝试建立webrtc连接？ peerConnections=$peerConnection , localStream=$localStream" }
+            if (peerConnection == null || localStream == null) return@LaunchedEffect
             logger.d("开始建立webrtc连接")
-            makeCall(peerConnections, localStream, setRemoteVideoTrack, setRemoteAudioTrack)
+            val signalingClient = SignalingClient(SOCKET_URL)
+            makeCall(peerConnection!!, signalingClient, localStream, setRemoteVideoTrack, setRemoteAudioTrack)
         }
 
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -103,10 +106,9 @@ fun App() {
                 } else {
                     StopButton(
                         onClick = {
-                            hangup(peerConnections)
+                            hangup(peerConnection)
                             localStream.release()
                             setLocalStream(null)
-                            setPeerConnections(null)
                             setRemoteVideoTrack(null)
                             setRemoteAudioTrack(null)
                         }
@@ -120,7 +122,7 @@ fun App() {
                 }
 
                 // 判断是否有连接
-                if (peerConnections == null) {
+                if (peerConnection == null) {
                     // 拨打，建立连接
                     CallButton(
                         onClick = {
@@ -131,14 +133,13 @@ fun App() {
                                 )
                             )
                             logger.d("1.  WebRTC 创建连接，这里与信令服务器无关，与STUN服务器有关系")
-                            setPeerConnections(Pair(PeerConnection(config), PeerConnection(config)))
+                            peerConnection = PeerConnection(config)
                         },
                     )
                 } else {
                     //挂断，断开连接
                     HangupButton(onClick = {
-                        hangup(peerConnections)
-                        setPeerConnections(null)
+                        hangup(peerConnection)
                         setRemoteVideoTrack(null)
                         setRemoteAudioTrack(null)
                     })

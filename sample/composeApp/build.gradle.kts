@@ -81,7 +81,6 @@ kotlin {
             implementation(compose.ui)
             implementation(compose.components.resources)
             implementation(compose.components.uiToolingPreview)
-            implementation(libs.kotlin.coroutines)
             implementation(libs.kermit)
             api(project(":webrtc-kmp"))
             implementation(libs.kotlinx.coroutines.core)
@@ -101,6 +100,11 @@ kotlin {
             implementation(libs.kotlin.wrappers.react)
             implementation(libs.kotlin.wrappers.reactDom)
             implementation(libs.kotlin.wrappers.emotion)
+        }
+        getByName("commonMain") {
+            dependencies {
+                implementation(libs.kotlinx.coroutines.core)
+            }
         }
     }
 }

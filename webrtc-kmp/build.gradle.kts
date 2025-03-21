@@ -87,7 +87,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation(libs.kotlin.coroutines)
+            implementation(libs.kotlinx.coroutines.core)
         }
 
         androidMain.dependencies {
