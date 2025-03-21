@@ -94,9 +94,14 @@ suspend fun makeCall(
             }
         }
         .launchIn(this)
+    // TODO 修改这里的连接信息，应该就可以打通视频会话
+    logger.d("修改这里的会话信息，完成与对方的视频链接")
+    // 发起会话 主动Call
     val offer = pc1.createOffer(OfferAnswerOptions(offerToReceiveVideo = true, offerToReceiveAudio = true))
     pc1.setLocalDescription(offer)
     pc2.setRemoteDescription(offer)
+
+    // 接收会话 被动应答
     val answer = pc2.createAnswer(options = OfferAnswerOptions())
     pc2.setLocalDescription(answer)
     pc1.setRemoteDescription(answer)

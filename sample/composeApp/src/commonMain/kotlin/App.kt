@@ -27,6 +27,9 @@ import com.shepeliev.webrtckmp.videoTracks
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
+
+var logger = Logger.withTag("WebRTCApp")
+
 @Composable
 @Preview
 fun App() {
@@ -53,7 +56,9 @@ fun App() {
         }
 
         LaunchedEffect(localStream, peerConnections) {
+            logger.i { "尝试建立webrtc连接？ peerConnections=$peerConnections , localStream=$localStream" }
             if (peerConnections == null || localStream == null) return@LaunchedEffect
+            logger.d("开始建立webrtc连接")
             makeCall(peerConnections, localStream, setRemoteVideoTrack, setRemoteAudioTrack)
         }
 
@@ -125,6 +130,7 @@ fun App() {
                                     IceServer(urls = listOf("stun:stun.l.google.com:19302"))
                                 )
                             )
+                            logger.d("1.  WebRTC 创建连接，这里与信令服务器无关，与STUN服务器有关系")
                             setPeerConnections(Pair(PeerConnection(config), PeerConnection(config)))
                         },
                     )
