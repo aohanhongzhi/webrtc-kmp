@@ -75,19 +75,30 @@ suspend fun makeCall(
 
         override fun onIceCandidateReceived(candidate: JsonObject) {
             CoroutineScope(Dispatchers.IO).launch {
+                Logger.d("onIceCandidateReceived 添加远端 ICE 候选")
                 try {
-                    val iceCandidate = IceCandidate("1", 1, "1")
-                    peerConnection.addIceCandidate(iceCandidate)
+                    val label = candidate["label"].toString().toIntOrNull()
+
+                    if (label == null) {
+                        Logger.d("onIceCandidateReceived: label 为空，使用默认值 0")
+                    } else {
+                        val iceCandidate = IceCandidate(
+                            candidate["id"].toString(), label ?: 0, candidate["candidate"].toString()
+                        )
+                        Logger.d("onIceCandidateReceived:" + iceCandidate)
+                        peerConnection.addIceCandidate(iceCandidate)
+                    }
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
                         onError("处理 Offer 失败: ${e.message}")
+                        onError("Error processing ice candidate: ${e.message}")
                     }
                 }
             }
         }
 
         override fun onDisconnected() {
-            TODO("Not yet implemented")
+            releaseResources()
         }
 
         override fun onError(errorMessage: String) {
@@ -97,6 +108,17 @@ suspend fun makeCall(
         override fun onConnectionError(errorMessage: String) {
             TODO("Not yet implemented")
         }
+
+        /**
+         * 释放 PeerConnection 和音频资源，避免内存泄漏。
+         */
+        fun releaseResources() {
+            Logger.e("releaseResources")
+            peerConnection.close()
+//        PeerConnectionFactory.stopInternalTracingCapture()
+//        PeerConnectionFactory.shutdownInternalTracer()
+        }
+
     })
 
     // 收集并转发 ICE Candidate
@@ -119,7 +141,7 @@ suspend fun makeCall(
     // 加入房间触发连接
     signalingClient.joinRoom(ROOM_NAME)
 
-    if (false){
+    if (false) {
         // 断开时清理
         peerConnection.close()
         signalingClient.disconnect()

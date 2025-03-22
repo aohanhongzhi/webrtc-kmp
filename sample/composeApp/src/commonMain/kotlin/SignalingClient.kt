@@ -1,6 +1,5 @@
 import co.touchlab.kermit.Logger
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 
@@ -39,7 +38,7 @@ class SignalingClient(private val socketUrl: String) {
         const val MESSAGE_TYPE_CANDIDATE = "candidate"
 
         const val SOCKET_URL = "https://47.99.135.85:8186"
-        const val ROOM_NAME = "A01001JOY00000002"
+        const val ROOM_NAME = "A01001JOY00000004"
     }
 
 
@@ -102,7 +101,7 @@ class SignalingClient(private val socketUrl: String) {
                     Logger.d("3. Room joined 1 接下来让摄像头call我，建立视频会话。:roomName:$roomName socketId：$socketId myId:$myId otherIds:$otherIds")
                     signalingListener?.onRemoteConnected()
                 } else {
-                    Logger.d("摄像头不在线 otherIds $otherIds")
+                    Logger.d("3. 房间 $roomName 摄像头不在线 otherIds $otherIds")
                 }
             } else {
                 //摄像头端上线

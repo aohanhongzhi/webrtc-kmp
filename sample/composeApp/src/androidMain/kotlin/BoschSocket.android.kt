@@ -71,11 +71,15 @@ actual class BoschSocket actual constructor(private val socketUrl: String) {
     actual fun on(event: String, callback: (args: Array<Any?>) -> Unit) {
 //        socket.on(event, callback)
         socket.on(event) { args ->
-            // 将 org.json.JSONArray 转换为 List<Any?>
             val convertedArgs = args.map { arg ->
-                when (arg) {
-                    is JSONArray -> convertJsonArrayToList(arg)
-                    else -> arg
+                when {
+                    // 将 org.json.JSONArray 转换为 List<Any?>
+                    arg is JSONArray -> convertJsonArrayToList(arg)
+                    arg?.javaClass?.isArray == true -> unwrapJavaArray(arg) // Handle raw Java arrays
+                    else -> {
+                        logger.i { "==> arg: $arg" }
+                        arg
+                    }
                 }
             }.toTypedArray() // List 转 Array
             callback(convertedArgs)
@@ -91,6 +95,23 @@ actual class BoschSocket actual constructor(private val socketUrl: String) {
         }
     }
 
+    // Helper function to unwrap raw Java arrays
+    private fun unwrapJavaArray(array: Any): Any? {
+        val javaArray = array as Array<Any?>
+        logger.i { "Unwrapping Java array: ${javaArray.joinToString()}" }
+        return when {
+            javaArray.isEmpty() -> null
+            javaArray.size == 1 -> javaArray[0] // Extract single element
+            else -> javaArray.map {
+                when {
+                    it?.javaClass?.isArray == true -> unwrapJavaArray(it)
+                    it is JSONArray -> convertJsonArrayToList(it)
+                    else -> it
+                }
+            }.toList()
+        }
+    }
+
     actual fun connect() {
         socket.connect()
     }
@@ -100,7 +121,9 @@ actual class BoschSocket actual constructor(private val socketUrl: String) {
     }
 
     actual fun emit(event: String, vararg args: Any?) {
-        socket.emit(event, args)
+        // 解决反序列化问题
+        val javaArgs = args as Array<Any?>
+        socket.emit(event, *javaArgs)
     }
 
 }
