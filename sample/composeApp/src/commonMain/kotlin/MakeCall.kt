@@ -1,8 +1,10 @@
 import SignalingClient.Companion.EVENT_GOT_USER_MEDIA
+import SignalingClient.Companion.MESSAGE_TYPE_CANDIDATE
 import SignalingClient.Companion.ROOM_NAME
 import co.touchlab.kermit.Logger
 import com.shepeliev.webrtckmp.AudioStreamTrack
 import com.shepeliev.webrtckmp.IceCandidate
+import com.shepeliev.webrtckmp.IceConnectionState
 import com.shepeliev.webrtckmp.MediaStream
 import com.shepeliev.webrtckmp.MediaStreamTrackKind
 import com.shepeliev.webrtckmp.OfferAnswerOptions
@@ -11,19 +13,25 @@ import com.shepeliev.webrtckmp.SessionDescription
 import com.shepeliev.webrtckmp.SessionDescriptionType
 import com.shepeliev.webrtckmp.VideoStreamTrack
 import com.shepeliev.webrtckmp.onIceCandidate
+import com.shepeliev.webrtckmp.onIceConnectionStateChange
 import com.shepeliev.webrtckmp.onTrack
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonPrimitive
 
 suspend fun makeCall(
     peerConnection: PeerConnection,
@@ -44,23 +52,30 @@ suspend fun makeCall(
         }
 
         override fun onRejoin() {
-            TODO("Not yet implemented")
+            TODO("onRejoin Not yet implemented")
         }
 
         override fun onOfferReceived(offer: JsonObject) {
             CoroutineScope(Dispatchers.IO).launch {
                 try {
-                    val sdpInfo = offer["sdp"].toString()
+                    val sdpInfo = offer["sdp"]?.jsonPrimitive?.content
                     Logger.d("处理远端 Offer: $sdpInfo")
+                    if (sdpInfo != null) {
+                        val sdp = SessionDescription(SessionDescriptionType.Offer, sdpInfo)
+                        peerConnection.setRemoteDescription(sdp)
 
-                    val sdp = SessionDescription(SessionDescriptionType.Offer, sdpInfo)
-                    peerConnection.setRemoteDescription(sdp)
+                        // 可选：创建 Answer 并发送
+                        val answer = peerConnection.createAnswer(OfferAnswerOptions(offerToReceiveVideo = true, offerToReceiveAudio = true))
+                        peerConnection.setLocalDescription(answer)
 
-                    // 可选：创建 Answer 并发送
-                    val answer = peerConnection.createAnswer(OfferAnswerOptions(offerToReceiveVideo = true, offerToReceiveAudio = true))
-                    peerConnection.setLocalDescription(answer)
-                    signalingClient.sendMessage(answer.toString())
-
+                        val answerBack = JsonObject(
+                            mapOf(
+                                "type" to JsonPrimitive(answer.type.name.lowercase()),
+                                "sdp" to JsonPrimitive(answer.sdp)
+                            )
+                        )
+                        signalingClient.sendMessage(answerBack)
+                    }
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
                         onError("处理 Offer 失败: ${e.message}")
@@ -70,20 +85,20 @@ suspend fun makeCall(
         }
 
         override fun onAnswerReceived(answer: JsonObject) {
-            TODO("Not yet implemented")
+            TODO("onAnswerReceived Not yet implemented")
         }
 
         override fun onIceCandidateReceived(candidate: JsonObject) {
             CoroutineScope(Dispatchers.IO).launch {
                 Logger.d("onIceCandidateReceived 添加远端 ICE 候选")
                 try {
+                    val sdpMid = candidate["id"]?.jsonPrimitive?.content
                     val label = candidate["label"].toString().toIntOrNull()
+                    val candidate1 = candidate["candidate"]?.jsonPrimitive?.content
 
-                    if (label == null) {
-                        Logger.d("onIceCandidateReceived: label 为空，使用默认值 0")
-                    } else {
+                    if (sdpMid != null && candidate1 != null) {
                         val iceCandidate = IceCandidate(
-                            candidate["id"].toString(), label ?: 0, candidate["candidate"].toString()
+                            sdpMid, label ?: 0, candidate1
                         )
                         Logger.d("onIceCandidateReceived:" + iceCandidate)
                         peerConnection.addIceCandidate(iceCandidate)
@@ -102,11 +117,11 @@ suspend fun makeCall(
         }
 
         override fun onError(errorMessage: String) {
-            TODO("Not yet implemented")
+            logger.e { "信令服务器报错信息 $errorMessage" }
         }
 
         override fun onConnectionError(errorMessage: String) {
-            TODO("Not yet implemented")
+            logger.e { "信令服务器连接过程中报错信息 $errorMessage" }
         }
 
         /**
@@ -123,9 +138,29 @@ suspend fun makeCall(
 
     // 收集并转发 ICE Candidate
     peerConnection.onIceCandidate
-        .onEach { candidate -> signalingClient.sendMessage(candidate.toString()) } // 瞎写的
+        .onEach { candidate ->
+            run {
+                logger.i { "$candidate" }
+
+                val candidateInfo = JsonObject(
+                    mapOf(
+                        "type" to JsonPrimitive(MESSAGE_TYPE_CANDIDATE),
+                        "candidate" to JsonPrimitive(candidate.candidate),
+                        "label" to JsonPrimitive(candidate.sdpMLineIndex),
+                        "id" to JsonPrimitive(candidate.sdpMid)
+                    )
+                )
+
+                signalingClient.sendMessage(candidateInfo)
+            }
+        }
         .launchIn(this)
 
+
+    val iceConnectionStateEmitted = async(start = CoroutineStart.UNDISPATCHED) {
+        peerConnection.onIceConnectionStateChange.first { it == IceConnectionState.Checking }
+        true
+    }
 
     // 处理远端轨道
     peerConnection.onTrack
@@ -134,6 +169,10 @@ suspend fun makeCall(
         .onEach { track ->
             if (track.kind == MediaStreamTrackKind.Video) {
                 onRemoteVideoTrack(track as VideoStreamTrack)
+            } else if (track.kind == MediaStreamTrackKind.Audio) {
+                onRemoteAudioTrack(track as AudioStreamTrack)
+            } else {
+                logger.e { "未知轨道类型 ${track.kind}" }
             }
         }
         .launchIn(this)

@@ -2,6 +2,7 @@ import co.touchlab.kermit.Logger
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * 摄像头作为服务端：
@@ -38,7 +39,7 @@ class SignalingClient(private val socketUrl: String) {
         const val MESSAGE_TYPE_CANDIDATE = "candidate"
 
         const val SOCKET_URL = "https://47.99.135.85:8186"
-        const val ROOM_NAME = "A01001JOY00000004"
+        const val ROOM_NAME = "A01001JOY00000002"
     }
 
 
@@ -59,7 +60,9 @@ class SignalingClient(private val socketUrl: String) {
             } else {
                 val message = Json.parseToJsonElement(args[2] as String).jsonObject
                 Logger.d("6. Socket on message ${message["type"]}")
-                when (message["type"]?.toString()) {
+                // 关键修改：使用 jsonPrimitive.content 获取原始字符串
+                val messageType = message["type"]?.jsonPrimitive?.content
+                when (messageType) {
 
                     // 下面是信令服务器发送的信令， 接收者收到offer、answer、candidate的回调
                     MESSAGE_TYPE_OFFER -> {
@@ -97,11 +100,16 @@ class SignalingClient(private val socketUrl: String) {
                 //检查摄像头是否在线
                 if (!otherIds.isEmpty()) {
                     // 这里其实可以指定好摄像头的id，但是id可能不固定。
-                    peerId = otherIds[0] as String
-                    Logger.d("3. Room joined 1 接下来让摄像头call我，建立视频会话。:roomName:$roomName socketId：$socketId myId:$myId otherIds:$otherIds")
-                    signalingListener?.onRemoteConnected()
+                    val otherIds1 = otherIds[0] as ArrayList<Any>
+                    if (!otherIds1.isEmpty()) {
+                        peerId = otherIds1[0] as String
+                        Logger.d("3. Room joined 1 接下来让摄像头call我，建立视频会话。:roomName:$roomName socketId：$socketId myId:$myId otherIds:$otherIds")
+                        signalingListener?.onRemoteConnected()
+                    } else {
+                        Logger.e("3. 1房间 $roomName 摄像头不在线 otherIds $otherIds")
+                    }
                 } else {
-                    Logger.d("3. 房间 $roomName 摄像头不在线 otherIds $otherIds")
+                    Logger.d("3. 2房间 $roomName 摄像头不在线 otherIds $otherIds")
                 }
             } else {
                 //摄像头端上线

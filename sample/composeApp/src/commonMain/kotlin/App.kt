@@ -130,7 +130,8 @@ fun App() {
                             // 设置ICE服务器
                             val config = RtcConfiguration(
                                 iceServers = listOf(
-                                    IceServer(urls = listOf("stun:stun.l.google.com:19302"))
+                                    IceServer(urls = listOf("stun:47.99.135.85:3478"))
+//                                    IceServer(urls = listOf("stun:stun.l.google.com:19302"))
                                 )
                             )
                             logger.d("1.  WebRTC 创建连接，这里与信令服务器无关，与STUN服务器有关系")
