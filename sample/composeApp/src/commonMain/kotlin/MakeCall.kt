@@ -157,19 +157,23 @@ suspend fun makeCall(
         .launchIn(this)
 
 
-    val iceConnectionStateEmitted = async(start = CoroutineStart.UNDISPATCHED) {
-        peerConnection.onIceConnectionStateChange.first { it == IceConnectionState.Checking }
-        true
-    }
+    peerConnection.onIceConnectionStateChange
+        .onEach { state ->
+            logger.i { "ICE Connection State: $state" }
+        }
+        .launchIn(this)
 
     // 处理远端轨道
     peerConnection.onTrack
         .map { it.track }
         .filterNotNull()
         .onEach { track ->
+            logger.i { "Received track: ${track.kind}, ${track.id}" }
             if (track.kind == MediaStreamTrackKind.Video) {
+                logger.i { "Received video track: ${track.id}" }
                 onRemoteVideoTrack(track as VideoStreamTrack)
             } else if (track.kind == MediaStreamTrackKind.Audio) {
+                logger.i { "Received audio track: ${track.id}" }
                 onRemoteAudioTrack(track as AudioStreamTrack)
             } else {
                 logger.e { "未知轨道类型 ${track.kind}" }

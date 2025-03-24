@@ -82,6 +82,9 @@ fun App() {
             }
 
             remoteVideoTrack?.let {
+
+                logger.i { "Rendering remote video track: ${it.id}" }
+
                 Video(
                     videoTrack = it, // 这里的it就是指的不为空的remoteVideoTrack
                     audioTrack = remoteAudioTrack,
