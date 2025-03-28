@@ -76,7 +76,7 @@ class SignalingClient(private val socketUrl: String) {
                     }
 
                     MESSAGE_TYPE_CANDIDATE -> {
-                        Logger.d("收到candidate:${message["type"]?.toString()}")
+                        Logger.d("收到远端 onIceCandidateReceived candidate:${message["type"]?.toString()} , ${message["candidate"]?.toString()}")
                         signalingListener?.onIceCandidateReceived(message)
                     }
 
@@ -88,6 +88,7 @@ class SignalingClient(private val socketUrl: String) {
         }
 
         socket.on(EVENT_ROOM_JOINED) { args ->
+            logger.i { "joined消息回调了 $args" }
             // 第一个参数是roomName
             roomName = args[0] as String
             // 第二个参数是socketId

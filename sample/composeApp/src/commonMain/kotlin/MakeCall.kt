@@ -16,19 +16,16 @@ import com.shepeliev.webrtckmp.onIceCandidate
 import com.shepeliev.webrtckmp.onIceConnectionStateChange
 import com.shepeliev.webrtckmp.onTrack
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
-import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
@@ -42,6 +39,28 @@ suspend fun makeCall(
 ): Nothing = coroutineScope {
 
     localStream.tracks.forEach { peerConnection.addTrack(it) }
+
+    peerConnection.onIceConnectionStateChange
+        .onEach { state ->
+            if (state == IceConnectionState.Failed) {
+                logger.e { "---------- ICE Connection State: $state" }
+            } else if (state == IceConnectionState.Connected) {
+                logger.i { "---------- ICE 连接成功 ICE Connection State: $state" }
+                // 监听远端视频轨道
+                peerConnection.onTrack
+                    .filterNotNull()
+                    .map { it.receiver.track as? VideoStreamTrack }
+                    .filterNotNull()
+            } else if (state == IceConnectionState.Checking) {
+                logger.i { "----------检测中 ICE Connection State: $state" }
+            } else if (state == IceConnectionState.Closed) {
+                logger.w { "----------关闭啦 ICE Connection State: $state" }
+            } else {
+                logger.e { "----------未知情况 ICE Connection State: $state" }
+
+            }
+        }
+        .launchIn(this)
 
     // 绑定信令监听
     signalingClient.setSignalingListener(object : SignalingClient.SignalingListener {
@@ -59,11 +78,12 @@ suspend fun makeCall(
             CoroutineScope(Dispatchers.IO).launch {
                 try {
                     val sdpInfo = offer["sdp"]?.jsonPrimitive?.content
-                    Logger.d("处理远端 Offer: $sdpInfo")
+                    Logger.d("8. onOfferReceived 处理远端 Offer，设置远程 SDP 并创建 Answer ")
                     if (sdpInfo != null) {
                         val sdp = SessionDescription(SessionDescriptionType.Offer, sdpInfo)
                         peerConnection.setRemoteDescription(sdp)
 
+                        Logger.d("9. 对方call我成功, 发起应答。")
                         // 可选：创建 Answer 并发送
                         val answer = peerConnection.createAnswer(OfferAnswerOptions(offerToReceiveVideo = true, offerToReceiveAudio = true))
                         peerConnection.setLocalDescription(answer)
@@ -90,18 +110,28 @@ suspend fun makeCall(
 
         override fun onIceCandidateReceived(candidate: JsonObject) {
             CoroutineScope(Dispatchers.IO).launch {
-                Logger.d("onIceCandidateReceived 添加远端 ICE 候选")
                 try {
                     val sdpMid = candidate["id"]?.jsonPrimitive?.content
                     val label = candidate["label"].toString().toIntOrNull()
                     val candidate1 = candidate["candidate"]?.jsonPrimitive?.content
 
                     if (sdpMid != null && candidate1 != null) {
-                        val iceCandidate = IceCandidate(
-                            sdpMid, label ?: 0, candidate1
-                        )
-                        Logger.d("onIceCandidateReceived:" + iceCandidate)
-                        peerConnection.addIceCandidate(iceCandidate)
+                        val iceCandidate = IceCandidate(sdpMid, label ?: 0, candidate1)
+//                        Logger.d("onIceCandidateReceived:" + iceCandidate)
+                        logger.i("onIceCandidateReceived 准备添加远端 ICE 候选 $iceCandidate")
+
+                        if (peerConnection.remoteDescription == null) {
+                            logger.i { "onIceCandidateReceived 添加远端 ICE 候选失败，远程 SDP 为空" }
+                        } else {
+                            val addIceCandidate = peerConnection.addIceCandidate(iceCandidate)
+                            if (!addIceCandidate) {
+                                logger.e { "onIceCandidateReceived 添加远端 ICE 候选失败" }
+                            } else {
+                                logger.i { "onIceCandidateReceived 添加远端 ICE 候选成功" }
+                            }
+                        }
+                    } else {
+                        logger.e { "onIceCandidateReceived 添加远端 ICE 候选失败，参数为空" }
                     }
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
@@ -137,31 +167,23 @@ suspend fun makeCall(
     })
 
     // 收集并转发 ICE Candidate
-    peerConnection.onIceCandidate
-        .onEach { candidate ->
-            run {
-                logger.i { "$candidate" }
+    peerConnection.onIceCandidate.onEach { candidate ->
+        run {
+            logger.i { "WebRTC的 peerConnection onIceCandidate  => $candidate" }
 
-                val candidateInfo = JsonObject(
-                    mapOf(
-                        "type" to JsonPrimitive(MESSAGE_TYPE_CANDIDATE),
-                        "candidate" to JsonPrimitive(candidate.candidate),
-                        "label" to JsonPrimitive(candidate.sdpMLineIndex),
-                        "id" to JsonPrimitive(candidate.sdpMid)
-                    )
+            val candidateInfo = JsonObject(
+                mapOf(
+                    "type" to JsonPrimitive(MESSAGE_TYPE_CANDIDATE),
+                    "candidate" to JsonPrimitive(candidate.candidate),
+                    "label" to JsonPrimitive(candidate.sdpMLineIndex),
+                    "id" to JsonPrimitive(candidate.sdpMid)
                 )
+            )
 
-                signalingClient.sendMessage(candidateInfo)
-            }
+            signalingClient.sendMessage(candidateInfo)
         }
-        .launchIn(this)
+    }.launchIn(this)
 
-
-    peerConnection.onIceConnectionStateChange
-        .onEach { state ->
-            logger.i { "ICE Connection State: $state" }
-        }
-        .launchIn(this)
 
     // 处理远端轨道
     peerConnection.onTrack

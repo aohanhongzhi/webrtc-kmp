@@ -77,7 +77,7 @@ actual class BoschSocket actual constructor(private val socketUrl: String) {
                     arg is JSONArray -> convertJsonArrayToList(arg)
                     arg?.javaClass?.isArray == true -> unwrapJavaArray(arg) // Handle raw Java arrays
                     else -> {
-                        logger.i { "==> arg: $arg" }
+//                        logger.i { "==>接收到信令服务器信息 arg: $arg" }
                         arg
                     }
                 }

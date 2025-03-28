@@ -133,7 +133,9 @@ fun App() {
                             // 设置ICE服务器
                             val config = RtcConfiguration(
                                 iceServers = listOf(
-                                    IceServer(urls = listOf("stun:47.99.135.85:3478"))
+//                                    IceServer(urls = listOf("stun:47.99.135.85:3478"))
+                                    IceServer(urls = listOf("stun:163.228.157.109:5349")),
+                                    IceServer(urls = listOf("turn:163.228.157.109:5349"), username = "peer", password = "1Qaz2wSx")
 //                                    IceServer(urls = listOf("stun:stun.l.google.com:19302"))
                                 )
                             )
