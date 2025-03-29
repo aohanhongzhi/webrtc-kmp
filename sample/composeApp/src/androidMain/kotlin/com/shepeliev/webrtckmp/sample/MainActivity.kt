@@ -1,17 +1,38 @@
 package com.shepeliev.webrtckmp.sample
 
 import App
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.shepeliev.webrtckmp.WebRtc
 import org.webrtc.Loggable
 import org.webrtc.Logging
 
 class MainActivity : ComponentActivity() {
+
+    private val permissions = arrayOf(
+        android.Manifest.permission.RECORD_AUDIO,
+        Manifest.permission.WRITE_EXTERNAL_STORAGE
+    )
+    private val requestCode = 1
+    private fun hasPermissions(): Boolean {
+        return permissions.all {
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private fun requestPermissions() {
+        ActivityCompat.requestPermissions(this, permissions, requestCode)
+    }
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -19,6 +40,10 @@ class MainActivity : ComponentActivity() {
             .setInjectableLogger(WebRtcLogger, Logging.Severity.LS_ERROR)
         val peerConnectionFactoryBuilder = WebRtc.createPeerConnectionFactoryBuilder(initializationOptionsBuilder)
         WebRtc.configure(peerConnectionFactoryBuilder = peerConnectionFactoryBuilder)
+
+        if (!hasPermissions()) {
+            requestPermissions()
+        }
 
         setContent {
             App()

@@ -17,8 +17,8 @@ import kotlinx.serialization.json.jsonPrimitive
  *      房间模型通过逻辑分组解耦设备发现和信令交换，更适合动态或未知对等端的场景（如物联网设备）。
  *
  */
-class SignalingClient(private val socketUrl: String) {
-    private lateinit var socket: BoschSocket
+class SignalingClient(socketUrl: String) {
+    private var socket: BoschSocket
     var isLeftRoom: Boolean = false
 
     // 保存当前连接的peerId,当前应该为摄像头的peerId。 通过这个peerId来给摄像头发送offer，摄像头收到answer，建立连接。
@@ -50,13 +50,15 @@ class SignalingClient(private val socketUrl: String) {
 
     private fun setupSocketEvents() {
         socket.on("connect") {
-            Logger.d("Socket connected，连接信令服务器成功")
+            Logger.d("Socket connected，连接信令服务器成功 ${socket.id()}")
         }
 
         socket.on(EVENT_MESSAGE) { args ->
             Logger.d("5. 接收到信令服务器的回调消息 EVENT_MESSAGE:${args[0]},${args[2]}")
             if (args[2] as String == EVENT_GOT_USER_MEDIA) {
                 Logger.d("Socket on message ${args[0] as String}")
+            } else if (args[2] as String == "bye") {
+                Logger.d("Bye Socket on message ${args[0] as String}")
             } else {
                 val message = Json.parseToJsonElement(args[2] as String).jsonObject
                 Logger.d("6. Socket on message ${message["type"]}")
@@ -103,9 +105,13 @@ class SignalingClient(private val socketUrl: String) {
                     // 这里其实可以指定好摄像头的id，但是id可能不固定。
                     val otherIds1 = otherIds[0] as ArrayList<Any>
                     if (!otherIds1.isEmpty()) {
-                        peerId = otherIds1[0] as String
-                        Logger.d("3. Room joined 1 接下来让摄像头call我，建立视频会话。:roomName:$roomName socketId：$socketId myId:$myId otherIds:$otherIds")
-                        signalingListener?.onRemoteConnected()
+                        if (otherIds1[1] == "1") {
+                            peerId = otherIds1[0] as String
+                            Logger.d("3. Room joined 1 接下来让摄像头call我，建立视频会话。:roomName:$roomName socketId：$socketId myId:$myId otherIds:$otherIds peerId:$peerId")
+                            signalingListener?.onRemoteConnected()
+                        } else {
+                            logger.i { "这个不是摄像头，是手机 ${otherIds[1]}" }
+                        }
                     } else {
                         Logger.e("3. 1房间 $roomName 摄像头不在线 otherIds $otherIds")
                     }

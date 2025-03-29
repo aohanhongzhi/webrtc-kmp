@@ -25,6 +25,7 @@ import com.shepeliev.webrtckmp.MediaStream
 import com.shepeliev.webrtckmp.PeerConnection
 import com.shepeliev.webrtckmp.RtcConfiguration
 import com.shepeliev.webrtckmp.IceServer
+import com.shepeliev.webrtckmp.IceTransportPolicy
 import com.shepeliev.webrtckmp.VideoStreamTrack
 import com.shepeliev.webrtckmp.videoTracks
 import kotlinx.coroutines.launch
@@ -32,6 +33,8 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 
 
 var logger = Logger.withTag("WebRTCApp")
+
+val signalingClient = SignalingClient(SOCKET_URL)
 
 @Composable
 @Preview
@@ -59,8 +62,7 @@ fun App() {
 
         LaunchedEffect(localStream, peerConnection) {
             logger.i { "尝试建立webrtc连接？ peerConnections=$peerConnection , localStream=$localStream" }
-            val signalingClient = SignalingClient(SOCKET_URL)
-            if (peerConnection == null || localStream == null) return@LaunchedEffect
+            if (peerConnection == null) return@LaunchedEffect
             logger.d("开始建立webrtc连接")
 
             makeCall(peerConnection!!, signalingClient, localStream, setRemoteVideoTrack, setRemoteAudioTrack)
@@ -104,7 +106,7 @@ fun App() {
                         scope.launch {
 //                            准备媒体信息，获取硬件信息，摄像头 麦克风，做好准备
                             val stream = MediaDevices.getUserMedia(audio = true, video = true)
-                            setLocalStream(stream)
+                            setLocalStream(stream) // 仅用于本地预览
                         }
                     })
                 } else {
@@ -137,7 +139,8 @@ fun App() {
                                     IceServer(urls = listOf("stun:163.228.157.109:5349")),
                                     IceServer(urls = listOf("turn:163.228.157.109:5349"), username = "peer", password = "1Qaz2wSx")
 //                                    IceServer(urls = listOf("stun:stun.l.google.com:19302"))
-                                )
+                                ),
+                                iceTransportPolicy = IceTransportPolicy.All
                             )
                             logger.d("1.  WebRTC 创建连接，这里与信令服务器无关，与STUN服务器有关系")
                             peerConnection = PeerConnection(config)
